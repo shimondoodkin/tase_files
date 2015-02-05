@@ -464,8 +464,8 @@ derta25=function(der)
 	var dt25wex={};var wn=dt25mexp.map(function(d){ return dt25wex[d]=exp_filter(dt25w,d); })
 	
 	
-	var allbyidm={};dt25m.map(function(a){allbyidm[a['Derivative ID']]=a})
-	var allbyidw={};dt25w.map(function(a){allbyidw[a['Derivative ID']]=a})
+	var allbyidm={};dt25m.forEach (function(a){allbyidm[a['Derivative ID']]=a})
+	var allbyidw={};dt25w.forEach (function(a){allbyidw[a['Derivative ID']]=a})
 	
 	return 	{
 	  allm:dt25m,
@@ -694,7 +694,17 @@ var app = express();
  });
  
  
- app.param("date", function(req, res, next, val) { if(val.match(/^\d{8}$/)) next(); else res.send("error: /date/yyyymmdd"); });
+ app.param("date", function(req, res, next, val) {
+     if(val.match(/^\d{8}$/))
+	 {
+	  if(!fs.existsSync("data/Full"+val+"0.zip"))
+	   res.send("error: no data for this date "+val); 
+	  else
+		next(); 
+	 }
+	 else
+	  res.send("error: /date/yyyymmdd"); 
+ });
  app.param("expdate", function(req, res, next, val) { if(val.match(/^\d{8}$/)) next(); else res.send("error: /date/yyyymmdd/expdate/yyyymmdd"); });
  
  app.get("/date", function(req, res) {
