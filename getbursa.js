@@ -7,6 +7,35 @@ var async=require('async');
 var moment=require('moment');
 var httpreq=require('httpreq');process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
 var JSZip = require("jszip");
+var iconv = new require('iconv').Iconv('ISO-8859-8','UTF-8');
+
+
+sync=function (cb)
+{
+	d=new Date("10/10/2014");
+	end=new Date(); end.setDate(end.getDate());
+	prelast=new Date(); prelast.setDate(prelast.getDate()-3);
+
+	toget=[];
+	while(d.getTime()<end.getTime())
+	{
+	 var nn="Full"+moment(d).format("YYYYMMDD")+"0.zip";
+	 var ff=__dirname+"/data/"+nn;
+	 var uu="https://www.tase.co.il/_layouts/Tase/Public/PackTarget/"+nn;
+	 if((!fs.existsSync(ff))||(d>prelast&&getFilesizeInBytes(ff)<200000))
+	 {
+	  toget.push({ff:ff,uu:uu,nn:nn});
+	 }
+	 d.setDate(d.getDate()+1)
+	}
+	console.log(toget)
+	//npm install unzip
+
+	async.eachLimit(toget, 1, requestApi, function(err,ee){
+		console.log("done sync");
+		if(cb)cb();
+	});
+}
 
 function requestApi(data,cb)
 {
@@ -42,34 +71,7 @@ function requestApi(data,cb)
 
 }
 
-sync=function (cb)
-{
-	d=new Date("10/10/2014");
-	end=new Date(); end.setDate(end.getDate());
-	prelast=new Date(); prelast.setDate(prelast.getDate()-3);
-
-	toget=[];
-	while(d.getTime()<end.getTime())
-	{
-	 d.setDate(d.getDate()+1)
-	 var nn="Full"+moment(d).format("YYYYMMDD")+"0.zip";
-	 var ff=__dirname+"/data/"+nn;
-	 var uu="https://www.tase.co.il/_layouts/Tase/Public/PackTarget/"+nn;
-	 if(!fs.existsSync(ff))
-	 {
-	  toget.push({ff:ff,uu:uu,nn:nn});
-	 }
-	}
-	console.log(toget)
-	//npm install unzip
-
-	async.eachLimit(toget, 1, requestApi, function(err,ee){
-		console.log("done sync");
-		if(cb)cb();
-	});
-}
-
-function getFilesizeInBytes(filename)
+getFilesizeInBytes=function (filename)
 {
  var fileSizeInBytes=0;
  try
@@ -85,7 +87,7 @@ tasefile=
 {
 /*
 to generate:
-download pdf then http://splitpdf.com 
+download pdfs then http://splitpdf.com 
 http://www.onlineocr.net/ choose excel each file
 paste in F6:
 =""""&MID(E7,9,100)&""":["
@@ -254,6 +256,7 @@ paste in F6:
 [	3	,	2	,	"Version"	,	"99"	,	""	],
 [	4	,	71	,	"Filler"	,	"X(71)"	,	"Zeroes"	],
 ],										
+
 }}
 
 
@@ -297,47 +300,53 @@ expandparserformat=function()
 }
 expandparserformat();
 
+
+
+
 parsefileinzip=function(zip,code)
 {
 	 //////
-	  var parser=tasefile[code];
-	  var rows={};
-	  var name=2,len=1,format=3,comments=4,unformat=5;//parser descriptor cols
-	  if(!parser) console.log("no parser for "+code);
-	  else
-	  {
-	   Object.keys(parser).map(function(type) {
-		   rows['a'+type]=[];
-	   });
-
-	   var files=zip.file( new RegExp("^"+code,""));
-	   files.forEach(function(file){
-	   	   file.asText().split(/[\r\n]+/).map(function(line,row){
-		   if(line.length==0)return;
-		   var type=line.substr(0,2);
-		   var lineparser=parser[type];
-		   if(!lineparser) console.log("no lineparser for "+(line.substr(0,2)));
-		   else
-		   {
-			   var arow={}
-			   for(var parsercol,i=0,t=0;i<lineparser.length;i++)
-			   {
-					parsercol=lineparser[i];
-					var nextt=t+parsercol[len];
-					var value=line.substring(t,nextt);
-					t=nextt;
-					//arow[ parsercol[name] ]=value; // unparsed
-					arow[ parsercol[name] ]=parsercol[unformat](value); //parsed
-			   }
-			   arow.id=row;
-			   rows['a'+type].push(arow)
-			   //console.log(row,arow);
-		   }
-		  })
-	   })
-	 }
-	 return rows;
-	 ////////////
+	var parser=tasefile[code];
+	var rows={};
+	var name=2,len=1,format=3,comments=4,unformat=5;//parser descriptor cols
+	if(!parser) console.log("no parser for "+code);
+	else
+	{
+		Object.keys(parser).map(function(type) {
+		rows['a'+type]=[];
+		});
+		var files=zip.file( new RegExp("^"+code,""));
+		files.forEach(function(file)
+		{
+			var lines=iconv.convert(file.asNodeBuffer()).toString().split(/[\r\n]+/);
+			for(var line,row=0;row<lines.length;row++)
+			{
+				line=lines[row];
+				if(line.length==0)continue;
+				var type=line.substr(0,2);
+				var lineparser=parser[type];
+				if(!lineparser) console.log("no lineparser for "+(line.substr(0,2)));
+				else
+				{
+					var arow={}
+					for(var parsercol,i=0,t=0;i<lineparser.length;i++)
+					{
+						parsercol=lineparser[i];
+						var nextt=t+parsercol[len];
+						var value=line.substring(t,nextt);
+						t=nextt;
+						//arow[ parsercol[name] ]=value; // unparsed
+						arow[ parsercol[name] ]=parsercol[unformat](value); //parsed
+					}
+					arow.id=row;
+					rows['a'+type].push(arow)
+					//console.log(row,arow);
+				}
+			}
+		})
+	}
+	return rows;
+	////////////
 }
 
 readzipfiles=function(zipfilename)
@@ -359,20 +368,44 @@ readzipfiles=function(zipfilename)
 
 
 
-join_info_to_list02=function (tase,der)
+join_list_info_to_list02=function (tase,list)
 {
-return der.map(function(a){
+	for(var a,i=0;i<list.length;i++)
+	{
+		a=list[i]
+		a.list03=tase.list.a03.filter(       function(aa){return aa['Derivative ID']==a['Derivative ID']})[0];
+		a.list04=tase.list.a04.length?
+				 tase.list.a04.filter(       function(aa){return aa['Derivative ID']==a['Derivative ID']})[0]:undefined; // usually empty collection   
+		a.list05=tase.list.a05.filter(       function(aa){return aa['Derivative ID']==a['Derivative ID']})[0];
+		/*
+		//this would not work this list is of tomorrow day, the derivcatives are of today:
 
-a.list03=tase.list.a03.filter(       function(aa){return aa['Derivative ID']==a['Derivative ID']})[0];
-a.list04=tase.list.a04.length?
-         tase.list.a04.filter(       function(aa){return aa['Derivative ID']==a['Derivative ID']})[0]:undefined; // usually empty collection   
-a.list05=tase.list.a05.filter(       function(aa){return aa['Derivative ID']==a['Derivative ID']})[0];
-a.der02 =tase.derivatives.a02.filter(function(aa){return aa['Derivative ID']==a['Derivative ID']})[0];
-a.der03 =tase.derivatives.a03.filter(function(aa){return aa['Derivative ID']==a['Derivative ID']})[0];
-a.der04 =tase.derivatives.a04.length?
-         tase.derivatives.a04.filter(function(aa){return aa['Derivative ID']==a['Derivative ID']})[0]:undefined; // usually empty collection
-		 return a;
-});
+		a.der02 =tase.derivatives.a02.filter(function(aa){return aa['Derivative ID']==a['Derivative ID']})[0];
+		a.der03 =tase.derivatives.a03.filter(function(aa){return aa['Derivative ID']==a['Derivative ID']})[0];
+		a.der04 =tase.derivatives.a04.length?
+				 tase.derivatives.a04.filter(function(aa){return aa['Derivative ID']==a['Derivative ID']})[0]:undefined; // usually empty collection
+		*/
+	}
+	return list;
+}
+
+join_der_info_to_prevday_list02=function (tase,prevday_list)
+{
+	for(var a,i=0;i<prevday_list.length;i++)
+	{
+		a=prevday_list[i]
+		a.der02 =tase.derivatives.a02.filter(function(aa){return aa['Derivative ID']==a['Derivative ID']})[0];
+		a.der03 =tase.derivatives.a03.filter(function(aa){return aa['Derivative ID']==a['Derivative ID']})[0];
+		a.der04 =tase.derivatives.a04.length?
+				 tase.derivatives.a04.filter(function(aa){return aa['Derivative ID']==a['Derivative ID']})[0]:undefined; // usually empty collection
+	}
+	return prevday_list;
+}
+
+join_info_to_list02=function (tase_prev,tase,prevday_list)
+{
+   join_list_info_to_list02(tase_prev,prevday_list) //enrich prevday_list with more info from its listing 
+return           join_der_info_to_prevday_list02(tase,prevday_list)
 }
 
 //unused
@@ -587,7 +620,8 @@ single derivative:
  
 //full example:
 //var tase=readzipfiles("Full201502020.zip");
-//var der=join_info_to_list02(tase,tase.list.a02);
+//var tase_prev=readzipfiles("Full201502020.zip");
+//var der=join_info_to_list02(tase_prev,tase,tase_prev.list.a02);
 //console.log(tsv(der_table(der_sort(derta25(der).mn[0]))))
 //console.log(tase.list.a01[0].Date+"\tto\t"+tase.list.a01[0]['Valid Date']) 
 
@@ -602,26 +636,85 @@ der_diff_open_positions=function(der_today_all,der_prevday_byid)
  return der_today_all;
 }
 
-function get_date()
+get_dates=function()
 {
-	var tase=readzipfiles("Full201502020.zip");
-	var tase_prev=readzipfiles("Full201502010.zip");
+ return fs.readdirSync('data').filter(function(file){return getFilesizeInBytes('data/'+file)>200000 }).sort().reverse().map(function(a){return a.substr(4,8)});
+}
 
-	var der_today=derta25(join_info_to_list02(tase,tase.list.a02));
-	var der_prevday=derta25(join_info_to_list02(tase_prev,tase_prev.list.a02));
+get_date=function(date,expdate)
+{
+    //date=20150202
+	
+    var files=fs.readdirSync('data').filter(function(file){return getFilesizeInBytes('data/'+file)>200000 }).sort();
+
+	tase=                         readzipfiles("Full"+date+"0.zip");
+	tase_prev=readzipfiles(files[files.indexOf("Full"+date+"0.zip")-1]);
+	tase_prev_prev=readzipfiles(files[files.indexOf("Full"+date+"0.zip")-2]);
+
+	var der_today=derta25(join_info_to_list02(tase_prev,tase,tase_prev.list.a02));
+	var der_prevday=derta25(join_info_to_list02(tase_prev_prev,tase_prev,tase_prev_prev.list.a02));
 
 	der_diff_open_positions(der_today.allm,der_prevday.byidm)
 
-	console.log(tsv(der_table(der_sort(der_today.mn[0]))))
-	console.log(der_today.mexp.join('\t'));
-	console.log(der_today.mexp[0]);
-	console.log("today\t"+tase.list.a01[0].Date+"\tto\t"+tase.list.a01[0]['Valid Date'])  //current and next trading day
-	console.log("prevday\t"+tase_prev.list.a01[0].Date+"\tto\t"+tase_prev.list.a01[0]['Valid Date'])  //current and next trading day
+	var t="";
+	t+="today\t"+tase.list.a01[0].Date+"\tnextday\t"+tase.list.a01[0]['Valid Date'] +'\n'  //current and next trading day
+	t+="prevday\t"+tase_prev.list.a01[0].Date+"\tnextday\t"+tase_prev.list.a01[0]['Valid Date'] +'\n' //current and next trading day
+	t+="nextday traded expire dates\t"+der_today.mexp.join('\t')+'\n\n'
+	
+	if(expdate)
+	{
+	 var d=der_today.mexp.indexOf(parseFloat(expdate));
+	 if(d>=0)
+	 {
+	  t+=der_today.mexp[d]+'\n'
+	  t+=tsv(der_table(der_sort(der_today.mn[d])))
+	 }
+	}
+	else
+	{
+	  t+=der_today.mexp[0]+'\n'
+	  t+=tsv(der_table(der_sort(der_today.mn[0])))
+	}
+	return t;
 }
+
   
+var express = require("express");
+var app = express();
+ 
+ app.get("/", function(req, res) {
+    res.send(":)")
+ });
  
  
+ app.get("/sync", function(req, res) { 
+	sync(function(){
+		res.send("OK");
+	});
+ });
  
+ 
+ app.param("date", function(req, res, next, val) { if(val.match(/^\d{8}$/)) next(); else res.send("error: /date/yyyymmdd"); });
+ app.param("expdate", function(req, res, next, val) { if(val.match(/^\d{8}$/)) next(); else res.send("error: /date/yyyymmdd/expdate/yyyymmdd"); });
+ 
+ app.get("/date", function(req, res) {
+	res.header("Content-Type", "text/plain; charset=utf-8");
+    res.send(get_dates().join('\n'))
+ });
+ 
+ app.get('/date/:date/:expdate', function(req, res) {
+  res.header("Content-Type", "text/plain; charset=utf-8");
+  res.send(get_date(req.params.date,req.params.expdate));
+ });
+ 
+ app.get('/date/:date', function(req, res) {
+  res.header("Content-Type", "text/plain; charset=utf-8");
+  res.send(get_date(req.params.date));
+ });
+ 
+ var port = process.env.PORT || 5000;
+ app.listen(port, function() { console.log("Listening on " + port); });
+
  
 /*
 Table 104 – Currencies
