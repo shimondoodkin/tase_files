@@ -1,5 +1,5 @@
 
-if(require.main === module) { var  repl = require("repl");repl.start({ useGlobal:true,  useColors:true, }); }
+if(require.main === module) { var  repl = require("repl");repl.start({ useGlobal:true,  useColors:true, }); } //there is console you can type in and run global functions and use global variables
 
 var fs=require('fs');
 
@@ -679,25 +679,33 @@ function numberdate(x)
 return x.replace(/(....)(..)(..)/,"$1-$2-$3")
 }
 
+var nofile_cache={};
 get_date=function(w,date,expdate,expand)
 {   
    function expandtablelines(data) //to old data add empty strikes in between. (at first there are less stikes availible) but i use the data today so it should be competible
    {
     var files=fs.readdirSync('data').filter(function(file){return getFilesizeInBytes('data/'+file)>200000 }).sort().reverse();
     var spliteddata=data.toString().split('\n').map(function(a){return a.split('\t')});
+    //console.log(spliteddata)
+    if(spliteddata.length<10) return data;
     var datastartsfrom=7;
     var exp=spliteddata.slice(0,10).filter(function(a,i){if(a[0]=='expire'){datastartsfrom=i;return true}else return false; })[0][1].replace(/-/g,'');
     exp=parseFloat(exp);
     var lastfile=files[0];
+    if(exp>parseFloat(files[0].substr(4,8)))
+        lastfile=files[1];
+    else
     for(var i=0;i<files.length;i++)
     {
-     //console.log("exp="+exp,"files[i]="+(files[i].substr(4,8)))
+     //console.log("exp="+exp,"files[i]="+(files[i].substr(4,8)),exp<=parseFloat(files[i].substr(4,8)))
      if(exp>=parseFloat(files[i].substr(4,8)))
      {
+        i++;
         lastfile=files[i];
         break;
      }
     }
+    if(!lastfile) return "can't expand";
     //console.log('get_date',w,lastfile.substr(4,8),exp,false);
     //console.log("lastfile date=",lastfile.substr(4,8),exp);
     var expanddata=get_date(w,lastfile.substr(4,8),exp,false);
@@ -726,7 +734,7 @@ get_date=function(w,date,expdate,expand)
     for(var j=0,i=0;i<expanded.length;i++)
     {
      if(i<=datastartsfrom) expanded[i]=spliteddata[j++];
-     else if(expanded[i][5]==spliteddata[j][5]) {expanded[i]=spliteddata[j++];}
+     else if(j<spliteddata.length&&expanded[i][0]==spliteddata[j][0]&&expanded[i][1]==spliteddata[j][1]) {expanded[i]=spliteddata[j++];}
      else {
      //0
      //1
@@ -739,6 +747,7 @@ get_date=function(w,date,expdate,expand)
      expanded[i][8]=0;
      }
     }
+    expanded[datastartsfrom-2][0]="expanded using\t"+splitedexpanddata[0][1]+"\t"+splitedexpanddata[datastartsfrom-1][1];
     return expanded.map(function(a){return a.join('\t')}).join('\n');
    }
     
@@ -746,23 +755,33 @@ get_date=function(w,date,expdate,expand)
     var cachefile="cache/"+date+'_'+(w?'w':'')+(expdate?expdate:'')+'.txt';
     if(fs.existsSync(cachefile))
     {
+        console.log('cache hit',cachefile);
         var data= fs.readFileSync(cachefile);
         if(expand) data=expandtablelines(data);
         return data;
-    }   
+    }  
+    if(nofile_cache[date]){
+    console.log('cache hit',cachefile,'no file');
+    return "no date";} 
+     
+    console.log('cache miss',cachefile);
     //date=20150202
 	
     var files=fs.readdirSync('data').filter(function(file){return getFilesizeInBytes('data/'+file)>200000 }).sort();
 
-	tase=          readzipfiles(                    "Full"+date+"0.zip");
-	tase_prev=     readzipfiles(files[files.indexOf("Full"+date+"0.zip")-1]);
-	tase_prev_prev=readzipfiles(files[files.indexOf("Full"+date+"0.zip")-2]);
+    var fileindex=files.indexOf("Full"+date+"0.zip")
+    
+    if(fileindex<3) { var notnewerfile=parseFloat(date)<parseFloat(files[files.length-1].substr(4,8));if(notnewerfile)nofile_cache[date]=true;return "no date";}
+    
+	var tase=          readzipfiles(                    "Full"+date+"0.zip");
+	var tase_prev=     readzipfiles(files[fileindex-1]);
+	var tase_prev_prev=readzipfiles(files[fileindex-2]);
     
     extend_list02(tase_prev     ,tase_prev     .list.a02,tase     )
     extend_list02(tase_prev_prev,tase_prev_prev.list.a02,tase_prev)
     
-	der_today=derta25(tase_prev.list.a02);       //today's list from previous day
-	der_prevday=derta25(tase_prev_prev.list.a02);//prevday's list from previous previous day
+	var der_today=derta25(tase_prev.list.a02);       //today's list from previous day
+	var der_prevday=derta25(tase_prev_prev.list.a02);//prevday's list from previous previous day
 
 	der_diff_open_positions(der_today.allm,der_prevday.byidm,der_prevday.mexp)
     der_diff_open_positions(der_today.allw,der_prevday.byidw,der_prevday.wexp)
@@ -811,12 +830,35 @@ get_date=function(w,date,expdate,expand)
 	return t;
 }
 
+var warmup_cache_prevdate
+warmup_cache=function()
+{
+warmup_cache_prevdate=new Date().getTime();
+    var files=fs.readdirSync('data').filter(function(file){return getFilesizeInBytes('data/'+file)>200000 }).sort().reverse();
+    for(var i=0;i<files.length-2;i++)
+    {
+     console.log(files[i].substr(4,8),i+1,"of",files.length-2,Math.round((i*100)/(files.length-3))+"%",(new Date().getTime()-warmup_cache_prevdate)/1000,'seconds prev file');
+     warmup_cache_prevdate=new Date().getTime();
+     get_date(false,files[i].substr(4,8),false,false);
+   }
+}
+  
+
+
+///cron - remember to get files.
+
+var syncd=new Date(); if(syncd.getHours()<19)syncd.setHours(19); else syncd.setHours(19+24);
+ synctimeout=setTimeout(function(){sync();syncinterval=setInterval(sync,24*60*60*1000)},(syncd.getTime()-(new Date().getTime())));  
+  
+  
+/////////server:
   
 require("setimmediate");//for express to work on node less then 10
 var express = require("express");
 var app = express();
  
  app.use('/',function(req,res,next){
+ //log
      console.log('visit',req.connection.remoteAddress,req.originalUrl);
      next();
  })
@@ -1034,3 +1076,5 @@ Asset Type
 04 Equity
 05 Government Bonds
 */
+
+ 
