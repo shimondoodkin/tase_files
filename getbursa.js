@@ -688,19 +688,17 @@ get_date=function(w,date,expdate,expand)
     var datastartsfrom=7;
     var exp=spliteddata.slice(0,10).filter(function(a,i){if(a[0]=='expire'){datastartsfrom=i;return true}else return false; })[0][1].replace(/-/g,'');
     exp=parseFloat(exp);
-    var fexp="Full"+exp+"0.zip"
-    console.log("fexp="+fexp)
     var lastfile=files[0];
     for(var i=0;i<files.length;i++)
     {
-     console.log("exp="+exp,"files[i]="+(files[i].substr(4,8)))
+     //console.log("exp="+exp,"files[i]="+(files[i].substr(4,8)))
      if(exp>=parseFloat(files[i].substr(4,8)))
      {
         lastfile=files[i];
         break;
      }
     }
-    console.log('get_date',w,lastfile.substr(4,8),exp,false);
+    //console.log('get_date',w,lastfile.substr(4,8),exp,false);
     //console.log("lastfile date=",lastfile.substr(4,8),exp);
     var expanddata=get_date(w,lastfile.substr(4,8),exp,false);
     var splitedexpanddata=expanddata.toString().split('\n').map(function(a){return a.split('\t')});
@@ -724,7 +722,7 @@ get_date=function(w,date,expdate,expand)
     */
     var expanded=splitedexpanddata.filter(function(){return true});//copy
     datastartsfrom+=1;
-    console.log('datastartsfrom',datastartsfrom)
+    //console.log('datastartsfrom',datastartsfrom)
     for(var j=0,i=0;i<expanded.length;i++)
     {
      if(i<=datastartsfrom) expanded[i]=spliteddata[j++];
