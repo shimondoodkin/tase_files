@@ -4,7 +4,7 @@ if(require.main === module) { var  repl = require("repl");repl.start({ useGlobal
 var fs=require('fs');
 
 var async=require('async');
-var moment=require('moment');
+var moment=require('moment');moment.locale('he');
 var httpreq=require('httpreq');process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
 var JSZip = require("jszip");
 var iconv = new require('iconv').Iconv('ISO-8859-8','UTF-8');
@@ -13,18 +13,18 @@ var iconv = new require('iconv').Iconv('ISO-8859-8','UTF-8');
 sync=function (cb)
 {
 	d=new Date("10/10/2014");
-	end=new Date(); end.setDate(end.getDate());
+	end=new Date(); end.setDate(end.getDate()-1);
 	prelast=new Date(); prelast.setDate(prelast.getDate()-3);
-
+    if(end.getHours()>17)end.setDate(end.getDate()+1);
 	toget=[];
 	while(d.getTime()<end.getTime())
 	{
 	 var nn="Full"+moment(d).format("YYYYMMDD")+"0.zip";
 	 var ff=__dirname+"/data/"+nn;
 	 var uu="https://www.tase.co.il/_layouts/Tase/Public/PackTarget/"+nn;
-	 if((!fs.existsSync(ff))||(d>prelast&&getFilesizeInBytes(ff)<200000))
+	 if((!fs.existsSync(ff))||(d.getTime()>prelast.getTime()&&getFilesizeInBytes(ff)<200000))
 	 {
-	  toget.push({ff:ff,uu:uu,nn:nn});
+	  toget.push({ff:ff,uu:uu,nn:nn,d:d.getTime()});
 	 }
 	 d.setDate(d.getDate()+1)
 	}
@@ -55,7 +55,8 @@ function requestApi(data,cb)
 			console.log(err);
 			cb();
 		}else{
-		    if(d>prelast&&res.body.length==0)
+            console.log(new Date(data.d).toString(),prelast.toString());
+		    if(data.d>=prelast.getTime()&&res.body.length==0)
 			{
 				console.log("no file "+data.nn);
 				cb();
@@ -231,8 +232,10 @@ paste in F6:
 "03":[										
 [	1	,	2	,	"Record Type"	,	"99"	,	"Value = 03 Record Type 03: Derivative Additional Details"	],
 [	2	,	8	,	"Derivative ID"	,	"9(8)"	,	""	],
-[	3	,	7	,	"Turnover ± Units"	,	"9(7)"	,	""	],
-[	4	,	15	,	"Turnover ± Monetary Value"	,	"9(13)V99"	,	"In terms of premium in NIS"	],
+//[	3	,	7	,	"Turnover ± Units"	,	"9(7)"	,	""	],
+[	3	,	7	,	"Turnover Units"	,	"9(7)"	,	""	],
+//[	4	,	15	,	"Turnover ± Monetary Value"	,	"9(13)V99"	,	"In terms of premium in NIS"	],
+[	4	,	15	,	"Turnover Monetary Value"	,	"9(13)V99"	,	"In terms of premium in NIS"	],
 [	5	,	15	,	"Volume of Trade"	,	"9(15)"	,	"In terms of underlying asset in NIS"	],
 [	6	,	10	,	"Underlying Asset Price"	,	"9(6)V9(4)"	,	"Closing price"	],
 [	7	,	4	,	"Number of Transactions"	,	"9(4)"	,	"If Value >9999, will contain 9999"	],
@@ -351,6 +354,9 @@ parsefileinzip=function(zip,code)
 
 readzipfiles=function(zipfilename)
 {
+    var cachefile="cache/"+zipfilename+'_readzipfiles.json';
+    if(fs.existsSync(cachefile))
+        return JSON.parse(fs.readFileSync(cachefile));
 //try{
 	// read a zip file
 	var data=fs.readFileSync(__dirname+"/data/"+zipfilename); 
@@ -358,6 +364,7 @@ readzipfiles=function(zipfilename)
 	var tase={};
 	tase.list=parsefileinzip(zip,'0096');
 	tase.derivatives=parsefileinzip(zip,'0028');
+    fs.writeFileSync(cachefile,JSON.stringify(tase));
 	return tase;
 	//readzip(zip,'0028')
 //}catch(e){}
@@ -402,10 +409,10 @@ join_der_info_to_prevday_list02=function (tase,prevday_list)
 	return prevday_list;
 }
 
-join_info_to_list02=function (tase_prev,tase,prevday_list)
+extend_list02=function (tase_prev,prevday_list,tase)
 {
-   join_list_info_to_list02(tase_prev,prevday_list) //enrich prevday_list with more info from its listing 
-return           join_der_info_to_prevday_list02(tase,prevday_list)
+               join_list_info_to_list02(tase_prev,prevday_list) //enrich prevday_list with more info from its listing 
+ return join_der_info_to_prevday_list02(tase     ,prevday_list)
 }
 
 //unused
@@ -461,7 +468,7 @@ derta25=function(der)
 	var dt25mexp=exp_dates(dt25m)
 	var dt25mex={};var mn=dt25mexp.map(function(d){ return dt25mex[d]=exp_filter(dt25m,d); })
 	var dt25wexp=exp_dates(dt25w)
-	var dt25wex={};var wn=dt25mexp.map(function(d){ return dt25wex[d]=exp_filter(dt25w,d); })
+	var dt25wex={};var wn=dt25wexp.map(function(d){ return dt25wex[d]=exp_filter(dt25w,d); })
 	
 	
 	var allbyidm={};dt25m.forEach (function(a){allbyidm[a['Derivative ID']]=a})
@@ -485,26 +492,38 @@ derta25=function(der)
  {
     var titles=[
 	   'Derivative Type',
-	   'Strike Price',
-	   'Settlement Price Date',
-	   'Derivative Hebrew Name',
+       'Strike Price',
+	   'VWAP Price',
+       
 	   'Open Positions Diff',
 	   'Open Positions',
+       
+	   'Derivative Hebrew Name',
+	   //'Settlement Price Date',
 	   'Open Positions Change Trend',
-	   'Open Positions Change Percentage'
+       'Money',
+       'Diff Money',
+
 	  ];
 	  
 	var data=
 	ar.map(function(a){
+    var vwap,op,dop
 	  return  [
 	   (a['Derivative Type']==1||a['Derivative Type']==4)?"C":(    (a['Derivative Type']==2||a['Derivative Type']==5)?"P": 'F'   )  ,
-	   a['Strike Price']/a.list05['Underlying Asset Price Multiplier'],
-	   a.list05['Settlement Price Date'],
-	   a['Derivative Hebrew Name'],
-	   a['Open Positions Diff'],
-	   a.der03['Open Positions'],
+       a['Strike Price']/a.list05['Underlying Asset Price Multiplier'],
+       
+	   vwap=Math.round(a.der03['Turnover Units']>0?((a.der03['Turnover Monetary Value']/a.der03['Turnover Units'])/a.list05['Underlying Asset Price Multiplier']):(a.der02['Base Price']/a.list05['Underlying Asset Price Multiplier']) ),
+       
+       dop=a['Open Positions Diff'],
+	   op=a.der03['Open Positions'],
+       
+       a['Derivative Hebrew Name'],
+
+	   //a.list05['Settlement Price Date'],
 	   a.der03['Open Positions Change Trend'],
-	   a.der03['Open Positions Change Percentage']
+       op*vwap,
+       dop*vwap
 	  ]
 	  
 	 });
@@ -590,8 +609,8 @@ single derivative:
   der03:
    { 'Record Type': 3,
      'Derivative ID': 81239733,
-     'Turnover ? Units': 23,
-     'Turnover ? Monetary Value': 332386000,
+     'Turnover Units': 23,
+     'Turnover Monetary Value': 332386000,
      'Volume of Trade': 3326743,
      'Underlying Asset Price': 14464100,
      'Number of Transactions': 11,
@@ -621,64 +640,181 @@ single derivative:
 //full example:
 //var tase=readzipfiles("Full201502020.zip");
 //var tase_prev=readzipfiles("Full201502020.zip");
-//var der=join_info_to_list02(tase_prev,tase,tase_prev.list.a02);
+//var der=extend_list02(tase_prev,tase_prev.list.a02,tase);
 //console.log(tsv(der_table(der_sort(derta25(der).mn[0]))))
 //console.log(tase.list.a01[0].Date+"\tto\t"+tase.list.a01[0]['Valid Date']) 
 
 
 
-der_diff_open_positions=function(der_today_all,der_prevday_byid)
+der_diff_open_positions=function(der_today_all,der_prevday_byid,prevdayexps)
 {
  der_today_all.map(function(today){
-  prevday=der_prevday_byid[today['Derivative ID']];
-  today['Open Positions Diff']=prevday.der03['Open Positions']-today.der03['Open Positions'];
+  var prevday=der_prevday_byid[ today['Derivative ID'] ];
+  //if(prevday===undefined) console.log("prevday.der03===undefined today['Derivative ID']=",today['Derivative ID'],' see id in der_prevday_byidg')
+  var exp_id_not_found_in_previous_day=prevdayexps.indexOf(today.list05['Settlement Price Date'])==-1
+  if(exp_id_not_found_in_previous_day)//first day of trading
+   today['Open Positions Diff']= today.der03['Open Positions'];
+  else
+  {
+   if(prevday===undefined) // if missing then change is 0
+    today['Open Positions Diff']= 0;
+   else
+    today['Open Positions Diff']= prevday.der03['Open Positions']   -   today.der03['Open Positions'];
+  }
+  
  })
  return der_today_all;
 }
 
 get_dates=function()
 {
- return fs.readdirSync('data').filter(function(file){return getFilesizeInBytes('data/'+file)>200000 }).sort().reverse().map(function(a){return a.substr(4,8)});
+ return fs.readdirSync('data').filter(function(file){return getFilesizeInBytes('data/'+file)>200000 }).sort().reverse().map(function(a){return a.substr(4,8)}).map(function(a){
+ var d=new Date(parseFloat(a.substr(0,4)),parseFloat(a.substr(4,2))-1,parseFloat(a.substr(6,2)),0,0,0,0)
+ return a+'\t'+moment(d).format("YYYY-MM-DD\t"+(d.getDay()+1)+"\tdddd");
+ }).join("\n");
 }
 
-get_date=function(date,expdate)
+function numberdate(x)
 {
+return x.replace(/(....)(..)(..)/,"$1-$2-$3")
+}
+
+get_date=function(w,date,expdate,expand)
+{   
+   function expandtablelines(data) //to old data add empty strikes in between. (at first there are less stikes availible) but i use the data today so it should be competible
+   {
+    var files=fs.readdirSync('data').filter(function(file){return getFilesizeInBytes('data/'+file)>200000 }).sort().reverse();
+    var spliteddata=data.toString().split('\n').map(function(a){return a.split('\t')});
+    var datastartsfrom=7;
+    var exp=spliteddata.slice(0,10).filter(function(a,i){if(a[0]=='expire'){datastartsfrom=i;return true}else return false; })[0][1].replace(/-/g,'');
+    exp=parseFloat(exp);
+    var fexp="Full"+exp+"0.zip"
+    console.log("fexp="+fexp)
+    var lastfile=files[0];
+    for(var i=0;i<files.length;i++)
+    {
+     console.log("exp="+exp,"files[i]="+(files[i].substr(4,8)))
+     if(exp>=parseFloat(files[i].substr(4,8)))
+     {
+        lastfile=files[i];
+        break;
+     }
+    }
+    console.log('get_date',w,lastfile.substr(4,8),exp,false);
+    //console.log("lastfile date=",lastfile.substr(4,8),exp);
+    var expanddata=get_date(w,lastfile.substr(4,8),exp,false);
+    var splitedexpanddata=expanddata.toString().split('\n').map(function(a){return a.split('\t')});
+    
+    /*
+    [
+    'Derivative Type', 0
+    'Strike Price', 1
+    'VWAP Price', 2
+    
+    'Open Positions Diff', 3
+    'Open Positions', 4
+    
+    'Derivative Hebrew Name', 5
+    //'Settlement Price Date',
+    'Open Positions Change Trend', 6
+    'Money', 7
+    'Diff Money', 8
+    
+    ]
+    */
+    var expanded=splitedexpanddata.filter(function(){return true});//copy
+    datastartsfrom+=1;
+    console.log('datastartsfrom',datastartsfrom)
+    for(var j=0,i=0;i<expanded.length;i++)
+    {
+     if(i<=datastartsfrom) expanded[i]=spliteddata[j++];
+     else if(expanded[i][5]==spliteddata[j][5]) {expanded[i]=spliteddata[j++];}
+     else {
+     //0
+     //1
+     expanded[i][2]=0;
+     expanded[i][3]=0;
+     expanded[i][4]=0;
+     //5
+     expanded[i][6]=0;
+     expanded[i][7]=0;
+     expanded[i][8]=0;
+     }
+    }
+    return expanded.map(function(a){return a.join('\t')}).join('\n');
+   }
+    
+    expand=expand==undefined?true:expand;
+    var cachefile="cache/"+date+'_'+(w?'w':'')+(expdate?expdate:'')+'.txt';
+    if(fs.existsSync(cachefile))
+    {
+        var data= fs.readFileSync(cachefile);
+        if(expand) data=expandtablelines(data);
+        return data;
+    }   
     //date=20150202
 	
     var files=fs.readdirSync('data').filter(function(file){return getFilesizeInBytes('data/'+file)>200000 }).sort();
 
-	tase=                         readzipfiles("Full"+date+"0.zip");
-	tase_prev=readzipfiles(files[files.indexOf("Full"+date+"0.zip")-1]);
+	tase=          readzipfiles(                    "Full"+date+"0.zip");
+	tase_prev=     readzipfiles(files[files.indexOf("Full"+date+"0.zip")-1]);
 	tase_prev_prev=readzipfiles(files[files.indexOf("Full"+date+"0.zip")-2]);
+    
+    extend_list02(tase_prev     ,tase_prev     .list.a02,tase     )
+    extend_list02(tase_prev_prev,tase_prev_prev.list.a02,tase_prev)
+    
+	der_today=derta25(tase_prev.list.a02);       //today's list from previous day
+	der_prevday=derta25(tase_prev_prev.list.a02);//prevday's list from previous previous day
 
-	var der_today=derta25(join_info_to_list02(tase_prev,tase,tase_prev.list.a02));
-	var der_prevday=derta25(join_info_to_list02(tase_prev_prev,tase_prev,tase_prev_prev.list.a02));
+	der_diff_open_positions(der_today.allm,der_prevday.byidm,der_prevday.mexp)
+    der_diff_open_positions(der_today.allw,der_prevday.byidw,der_prevday.wexp)
 
-	der_diff_open_positions(der_today.allm,der_prevday.byidm)
+    function maketext(w,d)
+    {
+        var der_today_w_or_mexp=(w?der_today.wexp:der_today.mexp);
+    	var t="";
+    	t+="today\t"+tase.list.a01[0].Date.toString().replace(/(..)(..)(..)/,"20$1-$2-$3")+"\tnextday\t"+tase.list.a01[0]['Valid Date'].toString().replace(/(....)(..)(..)/,"$1-$2-$3") +'\n'  //current and next trading day
+    	t+="prevday\t"+tase_prev.list.a01[0].Date.toString().replace(/(..)(..)(..)/,"20$1-$2-$3")+"\tnextday\t"+tase_prev.list.a01[0]['Valid Date'].toString().replace(/(....)(..)(..)/,"$1-$2-$3") +'\n' //current and next trading day
+    	t+="traded expire dates\t"+der_today_w_or_mexp.map(function(a){return a.toString().replace(/(....)(..)(..)/,"$1-$2-$3")}).join('\t')+'\n'
+        t+="traded expire dates\t"+der_today_w_or_mexp.join('\t')+'\n\n'
+        
+        t+='expire\t'+der_today_w_or_mexp[d].toString().replace(/(....)(..)(..)/,"$1-$2-$3")+'\t'+der_today_w_or_mexp[d]+'\n'
+        t+=tsv(der_table(der_sort((w?der_today.wn:der_today.mn)[d])))
+        return t;
+    }
 
-	var t="";
-	t+="today\t"+tase.list.a01[0].Date+"\tnextday\t"+tase.list.a01[0]['Valid Date'] +'\n'  //current and next trading day
-	t+="prevday\t"+tase_prev.list.a01[0].Date+"\tnextday\t"+tase_prev.list.a01[0]['Valid Date'] +'\n' //current and next trading day
-	t+="nextday traded expire dates\t"+der_today.mexp.join('\t')+'\n\n'
-	
+
+    var d;
 	if(expdate)
 	{
-	 var d=der_today.mexp.indexOf(parseFloat(expdate));
-	 if(d>=0)
-	 {
-	  t+=der_today.mexp[d]+'\n'
-	  t+=tsv(der_table(der_sort(der_today.mn[d])))
-	 }
-	}
-	else
-	{
-	  t+=der_today.mexp[0]+'\n'
-	  t+=tsv(der_table(der_sort(der_today.mn[0])))
-	}
+	 d=der_today.mexp.indexOf(parseFloat(expdate));
+	 if(d==-1)d=0;
+    }
+    else
+     d=0;
+	
+     //t=maketext(false,d);
+     der_today.mexp.forEach(function(vv,dd)
+     {
+      var tt=maketext(false,dd);
+      if(dd==0)fs.writeFileSync("cache/"+date+'_.txt',tt);
+      fs.writeFileSync("cache/"+date+'_'+der_today.mexp[dd]+'.txt',tt);
+      if((!w)&&dd==d) t=tt;
+     });
+     
+     der_today.wexp.forEach(function(vv,dd)
+     {
+      var tt=maketext(true,dd);
+      if(dd==0)fs.writeFileSync("cache/"+date+'_w.txt',tt);
+      fs.writeFileSync("cache/"+date+'_w'+der_today.wexp[dd]+'.txt',tt);
+      if(w&&dd==d) t=tt;
+     });
+    if(expand) t=expandtablelines(t);
 	return t;
 }
 
   
+require("setimmediate");//for express to work on node less then 10
 var express = require("express");
 var app = express();
  
@@ -709,17 +845,28 @@ var app = express();
  
  app.get("/date", function(req, res) {
 	res.header("Content-Type", "text/plain; charset=utf-8");
-    res.send(get_dates().join('\n'))
+    res.send(get_dates())
+ });
+ 
+ 
+ 
+ app.get('/date/:date/w', function(req, res) {
+  res.header("Content-Type", "text/plain; charset=utf-8");
+  res.send(get_date(true,req.params.date));
+ });
+ app.get('/date/:date/w:expdate', function(req, res) {
+  res.header("Content-Type", "text/plain; charset=utf-8");
+  res.send(get_date(true,req.params.date,req.params.expdate));
  });
  
  app.get('/date/:date/:expdate', function(req, res) {
   res.header("Content-Type", "text/plain; charset=utf-8");
-  res.send(get_date(req.params.date,req.params.expdate));
+  res.send(get_date(false,req.params.date,req.params.expdate));
  });
  
  app.get('/date/:date', function(req, res) {
   res.header("Content-Type", "text/plain; charset=utf-8");
-  res.send(get_date(req.params.date));
+  res.send(get_date(false,req.params.date));
  });
  
  var port = process.env.PORT || 5000;
