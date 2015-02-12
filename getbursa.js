@@ -816,6 +816,11 @@ require("setimmediate");//for express to work on node less then 10
 var express = require("express");
 var app = express();
  
+ app.use('/',function(req,res,next){
+     console.log('visit',req.connection.remoteAddress,req.originalUrl);
+     next();
+ })
+ 
  app.get("/", function(req, res) {
     res.send(":)")
  });
