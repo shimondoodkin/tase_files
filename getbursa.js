@@ -1,4 +1,3 @@
-
 if(require.main === module) { var  repl = require("repl");repl.start({ useGlobal:true,  useColors:true, }); } //there is console you can type in and run global functions and use global variables
 
 var fs=require('fs');
@@ -503,6 +502,7 @@ derta25=function(der)
 	   'Open Positions Change Trend',
        'Money',
        'Diff Money',
+       'Id',
 
 	  ];
 	  
@@ -523,7 +523,8 @@ derta25=function(der)
 	   //a.list05['Settlement Price Date'],
 	   a.der03['Open Positions Change Trend'],
        op*vwap,
-       dop*vwap
+       dop*vwap,
+       a['Derivative ID'],
 	  ]
 	  
 	 });
@@ -831,6 +832,8 @@ get_date=function(w,date,expdate,expand)
 }
 
 var warmup_cache_prevdate
+
+//enter in repl prompt warmup_cache() to warm up cache 
 warmup_cache=function()
 {
 warmup_cache_prevdate=new Date().getTime();
@@ -848,7 +851,7 @@ warmup_cache_prevdate=new Date().getTime();
 ///cron - remember to get files.
 
 var syncd=new Date(); if(syncd.getHours()<19)syncd.setHours(19); else syncd.setHours(19+24);
- synctimeout=setTimeout(function(){sync();syncinterval=setInterval(sync,24*60*60*1000)},(syncd.getTime()-(new Date().getTime())));  
+ synctimeout=setTimeout(function(){sync(warmup_cache);syncinterval=setInterval(function(){sync(warmup_cache)},24*60*60*1000)},(syncd.getTime()-(new Date().getTime())));  
   
   
 /////////server:
@@ -1076,5 +1079,3 @@ Asset Type
 04 Equity
 05 Government Bonds
 */
-
- 
