@@ -1385,6 +1385,11 @@ Asset Type
 
 
 
+
+// to craete table  run der_table_all_sql function in node repl to return table structure
+// example:
+
+// require('fs').writeFileSync('table.sql', der_table_all_sql() );
    
     var mysql      = require('mysql');
     
